@@ -1,0 +1,9 @@
+.DS_Store
+metroplex/
+*.pyc
+__pycache__/
+.pytest_cache/
+.venv/
+*.pid
+.save_state
+.play_rc
