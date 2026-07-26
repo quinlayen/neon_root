@@ -1,17 +1,14 @@
 #!/bin/bash
 # ============================================================
-#  Neon Root — world generator (hub + districts + stubs)
+#  Neon Root — world generator (hub + jobs)
 #  Usage:
 #    ./scripts/generate_world.sh --new
 #    ./scripts/generate_world.sh --continue
-#
-#  Resolves REPO from this script's location; ROOT = REPO/metroplex.
-#  bash 3.2 safe (no associative arrays, no mapfile).
+#  bash 3.2 safe.
 # ============================================================
 
 set -e
 
-# --- Resolve absolute REPO and ROOT ------------------------------------------
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 SCRIPT_DIR=$(cd "$(dirname -- "$SCRIPT_PATH")" && pwd) || exit 1
 REPO=$(cd "$SCRIPT_DIR/.." && pwd) || exit 1
@@ -26,42 +23,32 @@ source "$REPO/scripts/lib/seed.sh"
 # shellcheck disable=SC1091
 source "$REPO/scripts/lib/watchers.sh"
 # shellcheck disable=SC1091
+source "$REPO/scripts/lib/job_runtime.sh"
+# shellcheck disable=SC1091
 source "$REPO/scripts/detect_tools.sh"
 
-# Export for watchers.sh (NEON_ROOT preferred; ROOT also accepted)
 export NEON_ROOT="$ROOT"
 export ROOT
+export REPO
 
-# --- CLI ---------------------------------------------------------------------
 MODE=""
 case "${1:-}" in
-    --new|-n)
-        MODE="new"
-        ;;
-    --continue|-c)
-        MODE="continue"
-        ;;
+    --new|-n) MODE="new" ;;
+    --continue|-c) MODE="continue" ;;
     --help|-h)
         cat <<'HELP'
 Neon Root — world generator
 
-  ./scripts/generate_world.sh --new       Wipe metroplex/ and rebuild hub
-  ./scripts/generate_world.sh --continue  Refresh helpers / tools on existing world
+  ./scripts/generate_world.sh --new       Wipe metroplex/ and rebuild
+  ./scripts/generate_world.sh --continue  Refresh helpers / tools / jobs
   ./scripts/generate_world.sh --help      Show this help
 HELP
         exit 0
         ;;
-    "")
-        die "usage: $0 --new | --continue  (try --help)"
-        ;;
-    *)
-        die "unknown option: $1  (try --help)"
-        ;;
+    "") die "usage: $0 --new | --continue  (try --help)" ;;
+    *) die "unknown option: $1  (try --help)" ;;
 esac
 
-# --- Helpers -----------------------------------------------------------------
-
-# write_game_functions — copy template to ROOT/.game_functions.sh (always overwrite)
 write_game_functions() {
     local tpl="$REPO/scripts/templates/game_functions.sh"
     if [[ ! -f "$tpl" ]]; then
@@ -70,19 +57,11 @@ write_game_functions() {
     cp "$tpl" "$ROOT/.game_functions.sh" || die "cannot write $ROOT/.game_functions.sh"
 }
 
-# ensure_jobs_for_tools — PR3 stub (no job plugins yet)
-ensure_jobs_for_tools() {
-    return 0
-}
-
-# _write_room FILE content via stdin (heredoc)
-# Room description is a regular file named "-"
 _write_room() {
     local path="$1"
     cat > "$path"
 }
 
-# create_hub_mesh — districts, safehouse, symlinks, empty jobs/watchers/bin
 create_hub_mesh() {
     local d
     local districts="dockside helix_perimeter neon_market archive_stack undergrid corp_shard"
@@ -102,7 +81,6 @@ create_hub_mesh() {
         mkdir -p "$ROOT/districts/$d"
     done
 
-    # ── Safehouse room ──────────────────────────────────────────
     _write_room "$ROOT/safehouse/-" <<'ROOM'
   ═══════════════════════════════════════════════════
     SAFEHOUSE — Street Netrunner hub
@@ -110,19 +88,17 @@ create_hub_mesh() {
 
   Rain ticks against blackout glass. A battered jack-in cradle
   hums under a string of cheap neon. Your fixer's board glows
-  in the corner — contracts, when they post, land there.
+  in the corner — contracts land there.
 
   This is home base. Districts radiate out as linked grid edges.
-  The loadout rack is empty for now. The job board is quiet.
 
-  Type: look   |   hint   |   cd <exit>
+  Type: look | jobs | accept <id> | status | hint
   ═══════════════════════════════════════════════════
 ROOM
 
     _write_room "$ROOT/safehouse/.hint" <<'HINT'
-  Hint: use look to scan the room, then cd into an exit
-  (job_board, loadout, or a district). whereami and save
-  work once helpers are sourced.
+  Hint: run jobs to see the board, accept tutorial_grid first,
+  then cd jobs/tutorial_grid and complete the uplink.
 HINT
 
     _write_room "$ROOT/safehouse/job_board/-" <<'ROOM'
@@ -130,10 +106,8 @@ HINT
     JOB BOARD
   ═══════════════════════════════════════════════════
 
-  A wall of flickering slots: open, active, completed, locked.
-  No contracts are posted yet — the fixer is offline.
-
-  Subdirs hold board files when gigs go live.
+  Open / active / completed / locked slots.
+  Type: jobs   (from any room with helpers loaded)
   ═══════════════════════════════════════════════════
 ROOM
 
@@ -142,12 +116,10 @@ ROOM
     LOADOUT
   ═══════════════════════════════════════════════════
 
-  An empty rack and a grounded mat. Gear you take will land
-  in inventory; nothing is stashed here yet.
+  Drop gear here or use take/drop into inventory.
   ═══════════════════════════════════════════════════
 ROOM
 
-    # Safehouse → district / jobs symlinks (relative)
     ln -sfn ../districts/dockside        "$ROOT/safehouse/dockside"
     ln -sfn ../districts/neon_market     "$ROOT/safehouse/neon_market"
     ln -sfn ../districts/helix_perimeter "$ROOT/safehouse/helix_perimeter"
@@ -156,20 +128,17 @@ ROOM
     ln -sfn ../districts/corp_shard      "$ROOT/safehouse/corp_shard"
     ln -sfn ../jobs                      "$ROOT/safehouse/jobs"
 
-    # ── District lore rooms ─────────────────────────────────────
     _write_room "$ROOT/districts/dockside/-" <<'ROOM'
   ═══════════════════════════════════════════════════
     DOCKSIDE
   ═══════════════════════════════════════════════════
 
-  Salt, rust, and pirate Wi-Fi. Container stacks form alleys;
-  badge readers blink on warehouse doors. Good place to skim
-  access tokens when jobs land.
+  Salt, rust, and pirate Wi-Fi. Badge readers blink on
+  warehouse doors. Good place to skim access tokens.
   ═══════════════════════════════════════════════════
 ROOM
     _write_room "$ROOT/districts/dockside/.hint" <<'HINT'
-  Hint: cd safehouse to jack back to the hub, or follow
-  helix_perimeter along the waterline firewall.
+  Hint: jobs badge_skim and archive_drop stage here.
 HINT
 
     _write_room "$ROOT/districts/helix_perimeter/-" <<'ROOM'
@@ -177,14 +146,11 @@ HINT
     HELIX PERIMETER
   ═══════════════════════════════════════════════════
 
-  Glass towers and drone traffic. Helix Dynamics owns the
-  skyline; the perimeter fence is more policy than steel.
-  Watcher processes like it here.
+  Glass towers and drone traffic. Watcher processes like it here.
   ═══════════════════════════════════════════════════
 ROOM
     _write_room "$ROOT/districts/helix_perimeter/.hint" <<'HINT'
-  Hint: dockside and corp_shard link from here. Safehouse
-  is always one symlink away.
+  Hint: perm_gate and kill_watcher contracts.
 HINT
 
     _write_room "$ROOT/districts/neon_market/-" <<'ROOM'
@@ -192,12 +158,11 @@ HINT
     NEON MARKET
   ═══════════════════════════════════════════════════
 
-  Vendor stalls under holographic awnings. Firmware, IDs,
-  and bad coffee. Noise is cover; cameras still listen.
+  Vendor stalls under holographic awnings. Noise is cover.
   ═══════════════════════════════════════════════════
 ROOM
     _write_room "$ROOT/districts/neon_market/.hint" <<'HINT'
-  Hint: archive_stack is a relative hop from the market edge.
+  Hint: log_spike and dash_payload live on this edge.
 HINT
 
     _write_room "$ROOT/districts/archive_stack/-" <<'ROOM'
@@ -205,13 +170,11 @@ HINT
     ARCHIVE STACK
   ═══════════════════════════════════════════════════
 
-  Cold racks of seized repos and redacted dumps. The
-  Collective leaves dead drops in the lower rows when
-  the grid is quiet.
+  Cold racks of seized repos. Git safehouses burn here.
   ═══════════════════════════════════════════════════
 ROOM
     _write_room "$ROOT/districts/archive_stack/.hint" <<'HINT'
-  Hint: edges run to neon_market, undergrid, and corp_shard.
+  Hint: git_safehouse and git_stash_drop.
 HINT
 
     _write_room "$ROOT/districts/undergrid/-" <<'ROOM'
@@ -219,13 +182,11 @@ HINT
     UNDERGRID
   ═══════════════════════════════════════════════════
 
-  Maintenance tunnels under the city OS. Cable trays,
-  forgotten jump boxes, and processes that never got a
-  proper kill signal.
+  Maintenance tunnels. Implant compilers hum below.
   ═══════════════════════════════════════════════════
 ROOM
     _write_room "$ROOT/districts/undergrid/.hint" <<'HINT'
-  Hint: climb back via archive_stack, or safehouse from any district.
+  Hint: implant_parse (python) stages here.
 HINT
 
     _write_room "$ROOT/districts/corp_shard/-" <<'ROOM'
@@ -233,52 +194,42 @@ HINT
     CORP SHARD
   ═══════════════════════════════════════════════════
 
-  A leased data shard humming behind badge-gated glass.
-  Payroll tables and HR ghosts live here — when the SQL
-  tool is online and a contract posts.
+  Payroll tables and HR ghosts — when sqlite3 is online.
   ═══════════════════════════════════════════════════
 ROOM
     _write_room "$ROOT/districts/corp_shard/.hint" <<'HINT'
-  Hint: linked from helix_perimeter and archive_stack.
+  Hint: payroll_shard stretch job (optional).
 HINT
 
-    # District → safehouse
     for d in $districts; do
         ln -sfn ../../safehouse "$ROOT/districts/$d/safehouse"
     done
 
-    # District-to-district map edges (bidirectional relative symlinks)
     ln -sfn ../helix_perimeter "$ROOT/districts/dockside/helix_perimeter"
     ln -sfn ../dockside        "$ROOT/districts/helix_perimeter/dockside"
-
     ln -sfn ../archive_stack   "$ROOT/districts/neon_market/archive_stack"
     ln -sfn ../neon_market     "$ROOT/districts/archive_stack/neon_market"
-
     ln -sfn ../archive_stack   "$ROOT/districts/undergrid/archive_stack"
     ln -sfn ../undergrid       "$ROOT/districts/archive_stack/undergrid"
-
     ln -sfn ../corp_shard      "$ROOT/districts/helix_perimeter/corp_shard"
     ln -sfn ../helix_perimeter "$ROOT/districts/corp_shard/helix_perimeter"
-
     ln -sfn ../corp_shard      "$ROOT/districts/archive_stack/corp_shard"
     ln -sfn ../archive_stack   "$ROOT/districts/corp_shard/archive_stack"
 }
 
-# write_ledger_stub — empty/header-only authoritative ledger
 write_ledger_stub() {
     cat > "$ROOT/.job_ledger" <<'LEDGER'
-# Neon Root job ledger (authoritative)
-# Rows: job_id status  (accepted|completed)
-# Empty until jobs are accepted.
+# id|state|accepted_at|completed_at
 LEDGER
 }
 
-# --- Modes -------------------------------------------------------------------
-
 if [[ "$MODE" == "new" ]]; then
     info "Neon Root — generating new world…"
-    # Safe even when metroplex missing or .watchers empty
     kill_all_watchers
+    # chmod 000 puzzle dirs (perm_gate) block rm -rf without a mode reset first
+    if [[ -d "$ROOT" ]]; then
+        chmod -R u+rwx "$ROOT" 2>/dev/null || true
+    fi
     rm -rf "$ROOT" || die "cannot remove $ROOT (close any shell cd'd into metroplex, then retry --new)"
     mkdir -p "$ROOT"
 
@@ -287,23 +238,23 @@ if [[ "$MODE" == "new" ]]; then
     detect_tools "$ROOT" >/dev/null || warn "detect_tools failed; .tools may be missing"
     seed_load "$ROOT" || die "seed_load failed"
     write_ledger_stub
-    # empty inventory already created
-    write_game_functions
 
-    # Truncate/overwrite generate log on full --new
     {
         printf 'MODE=new\n'
         printf 'SEED_LEN=%s\n' "${#NEON_SEED}"
         printf 'ROOT=%s\n' "$ROOT"
-        printf 'NOTE=no jobs installed (PR3 hub only)\n'
     } > "$ROOT/.generate.log"
+
+    install_all_jobs "$ROOT"
+    board_sync_from_ledger "$ROOT"
+    write_game_functions
 
     log ""
     log "  World ready: $ROOT"
     log "  Start room:  safehouse/"
     log "  Seed:        written (.seed)"
     log "  Helpers:     .game_functions.sh"
-    log "  (No jobs yet — hub browse via: source metroplex/.game_functions.sh)"
+    log "  try:  ./play.sh"
     log ""
     exit 0
 fi
@@ -316,19 +267,18 @@ if [[ ! -f "$ROOT/.seed" ]]; then
     die "missing $ROOT/.seed — run: $0 --new"
 fi
 
-info "Neon Root — continue (refresh helpers / tools)…"
+info "Neon Root — continue (refresh helpers / tools / jobs)…"
 detect_tools "$ROOT" >/dev/null || warn "detect_tools failed; .tools may be missing"
 seed_load "$ROOT" || die "seed_load failed"
 write_game_functions
-# ensure_jobs_for_tools not required yet (no jobs)
 ensure_jobs_for_tools "$ROOT" || true
-# respawn_watchers not required with no accepted jobs
+board_sync_from_ledger "$ROOT" || true
+respawn_watchers_for_accepted "$ROOT" || true
 
 {
     printf 'MODE=continue\n'
     printf 'SEED_LEN=%s\n' "${#NEON_SEED}"
     printf 'ROOT=%s\n' "$ROOT"
-    printf 'NOTE=helpers refreshed; no jobs yet\n'
 } >> "$ROOT/.generate.log"
 
 log ""
