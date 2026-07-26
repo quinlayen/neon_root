@@ -44,30 +44,15 @@ JOB_STRETCH=0
 JOB_HAS_WATCHER=0
 EOF
 
-  {
+  # Winner IP is the seed token string (most frequent line). No seq (not on all PATH cuts).
+    {
     local i
-    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-      echo "10.0.0.1"
-    done
-    for i in 1 2 3 4 5; do
-      echo "10.0.0.2"
-    done
-    for i in 1 2 3; do
-      echo "10.0.0.3"
-    done
-    # hide token IP as the winner by frequency
-    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-      echo "203.0.113.${top:0:1}"
-    done
-  } > "$jobdir/access.log"
-
-  # Actually use a clean IP built from token so checker is exact
-  # Rebuild with explicit winner IP = "10.66.${byte}." style from token hex
-  {
-    local i
-    for i in $(seq 1 20); do echo "${top}"; done
-    for i in $(seq 1 5); do echo "noise.ip.1"; done
-    for i in $(seq 1 3); do echo "noise.ip.2"; done
+    i=0
+    while [[ $i -lt 20 ]]; do echo "${top}"; i=$((i + 1)); done
+    i=0
+    while [[ $i -lt 5 ]]; do echo "noise.ip.1"; i=$((i + 1)); done
+    i=0
+    while [[ $i -lt 3 ]]; do echo "noise.ip.2"; i=$((i + 1)); done
   } > "$jobdir/access.log"
 
   cat > "$jobdir/.check_complete" <<EOF
