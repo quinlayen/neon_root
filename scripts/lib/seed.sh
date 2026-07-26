@@ -84,12 +84,19 @@ seed_token() {
     fi
 
     # Positive integer 1..64 (sha256 hex is 64 chars). bash 3.2-safe (no =~).
+    # Reject leading zeros (08/09 trip bash octal arithmetic: "value too great for base").
     case "$len" in
         ''|*[!0-9]*)
             printf 'seed_token: len must be a positive integer (got %s)\n' "$len" >&2
             return 1
             ;;
+        0?*)
+            printf 'seed_token: len must be a positive integer without leading zeros (got %s)\n' "$len" >&2
+            return 1
+            ;;
     esac
+    # Force decimal for range check and substring (defensive)
+    len=$((10#$len))
     if [[ "$len" -lt 1 || "$len" -gt 64 ]]; then
         printf 'seed_token: len must be 1..64 (got %s)\n' "$len" >&2
         return 1
