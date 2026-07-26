@@ -22,6 +22,13 @@ WORLD="$SCRIPT_DIR/metroplex"
 GEN="$SCRIPT_DIR/scripts/generate_world.sh"
 DETECT="$SCRIPT_DIR/scripts/detect_tools.sh"
 
+# Single flag only (no stacked options)
+if [[ "$#" -gt 1 ]]; then
+    echo "Too many arguments: $*" >&2
+    echo "  (try ./play.sh --help)" >&2
+    exit 1
+fi
+
 MODE="auto"
 case "${1:-}" in
     --new|-n)       MODE="new" ;;
@@ -37,6 +44,8 @@ Neon Root — launcher
   ./play.sh --tools      Detect python3/git/sqlite3 and print; exit
   ./play.sh --help       Show this help
 
+Exactly one flag (or none for auto). Extra arguments are rejected.
+
 After launch you are in a game shell with helpers loaded.
 Type look, hint, whereami, save — or real Linux commands.
 Type exit when you are done (progress stays on disk).
@@ -47,7 +56,7 @@ HELP
         MODE="auto"
         ;;
     *)
-        echo "Unknown option: $1  (try ./play.sh --help)"
+        echo "Unknown option: $1  (try ./play.sh --help)" >&2
         exit 1
         ;;
 esac
@@ -65,7 +74,7 @@ if [[ "$MODE" == "tools" ]]; then
     else
         bash "$DETECT"
     fi
-    exit 0
+    exit $?
 fi
 
 # Re-detect before generate (writes .tools when metroplex/ exists)
@@ -95,18 +104,58 @@ else
 fi
 
 if [[ ! -f "$WORLD/.game_functions.sh" ]]; then
-    echo "  Game world is missing. Try: ./play.sh --new"
+    echo "  Game world is missing. Try: ./play.sh --new" >&2
     exit 1
 fi
 
 # ── Resolve start room (last save, else safehouse) ───────────
+# Do NOT source .save_state (arbitrary shell). Parse SAVE_ROOM= only.
+# Accept only relative paths that stay under metroplex/ as directories.
 START_ROOM="safehouse"
 if [[ -f "$WORLD/.save_state" ]]; then
-    # shellcheck disable=SC1091
-    source "$WORLD/.save_state"
-    if [[ -n "${SAVE_ROOM:-}" && -d "$WORLD/$SAVE_ROOM" ]]; then
-        START_ROOM="$SAVE_ROOM"
+    _save_line=""
+    _save_raw=""
+    _save_ok=0
+    _world_abs=""
+    _room_abs=""
+
+    _save_line=$(grep '^SAVE_ROOM=' "$WORLD/.save_state" 2>/dev/null | head -n 1) || true
+    if [[ -n "$_save_line" ]]; then
+        _save_raw="${_save_line#SAVE_ROOM=}"
+        # Strip one layer of matching single or double quotes (save() writes double-quoted)
+        if [[ "$_save_raw" == \"*\" ]]; then
+            _save_raw="${_save_raw#\"}"
+            _save_raw="${_save_raw%\"}"
+        elif [[ "$_save_raw" == \'*\' ]]; then
+            _save_raw="${_save_raw#\'}"
+            _save_raw="${_save_raw%\'}"
+        fi
+
+        # Reject empty, absolute, backslash, or any ".." path component
+        if [[ -n "$_save_raw" && "$_save_raw" != /* && "$_save_raw" != *\\* ]]; then
+            case "/${_save_raw}/" in
+                */../*) ;;  # reject parent traversal
+                *)
+                    if [[ -d "$WORLD/$_save_raw" ]]; then
+                        _world_abs=$(cd "$WORLD" && pwd) || _world_abs=""
+                        _room_abs=$(cd "$WORLD/$_save_raw" && pwd) || _room_abs=""
+                        if [[ -n "$_world_abs" && -n "$_room_abs" ]]; then
+                            case "$_room_abs" in
+                                "$_world_abs"|"$_world_abs"/*)
+                                    _save_ok=1
+                                    ;;
+                            esac
+                        fi
+                    fi
+                    ;;
+            esac
+        fi
     fi
+
+    if [[ "$_save_ok" -eq 1 ]]; then
+        START_ROOM="$_save_raw"
+    fi
+    unset _save_line _save_raw _save_ok _world_abs _room_abs
 fi
 
 START_PATH="$WORLD/$START_ROOM"
