@@ -118,14 +118,16 @@ SAVE_ROOM="$rel"
 SAVE_TIME="$(date '+%Y-%m-%d %H:%M:%S')"
 SAVE_EOF
 
-    # Truncate long paths so fixed-width banner stays aligned (inner width 36)
+    # Truncate so full line fits %-36s (reserve prefix + 3-char ellipsis):
+    #   "Room: " (6)  + body ≤ 30  → if over: first 27 + "..."
+    #   "Last room: " (11) + body ≤ 25 → if over: first 22 + "..."
     local room_disp="${rel:-.}"
     local last_disp="$rel"
     if [[ ${#room_disp} -gt 30 ]]; then
-        room_disp="${room_disp:0:30}..."
+        room_disp="${room_disp:0:27}..."
     fi
     if [[ ${#last_disp} -gt 25 ]]; then
-        last_disp="${last_disp:0:25}..."
+        last_disp="${last_disp:0:22}..."
     fi
 
     echo ""

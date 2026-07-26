@@ -102,6 +102,11 @@ kill_all_watchers() {
                 continue
             fi
             job_id=$(basename -- "$pf" .pid)
+            # Invalid basenames are never signaled; still remove the stray pidfile
+            if ! _neon_watcher_job_id_ok "$job_id"; then
+                rm -f "$pf" 2>/dev/null || true
+                continue
+            fi
             kill_watcher "$job_id"
         done
     fi
