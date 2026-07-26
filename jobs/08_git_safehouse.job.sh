@@ -45,17 +45,29 @@ JOB_STRETCH=0
 JOB_HAS_WATCHER=0
 EOF
 
-  (
-    cd "$jobdir/vault" || exit 1
-    git init -q
-    git -c user.email=runner@neon.local -c user.name='Neon Root' checkout -q -b main 2>/dev/null || true
-    printf 'KEY=%s\n' "$secret" > vault_key.txt
-    git -c user.email=runner@neon.local -c user.name='Neon Root' add vault_key.txt
-    git -c user.email=runner@neon.local -c user.name='Neon Root' commit -q -m "store vault key"
-    rm -f vault_key.txt
-    git -c user.email=runner@neon.local -c user.name='Neon Root' add -A
-    git -c user.email=runner@neon.local -c user.name='Neon Root' commit -q -m "burn the vault"
-  )
+  # Full repo only when git is available; never abort world gen without git.
+  if command -v git >/dev/null 2>&1; then
+    rm -rf "$jobdir/vault"
+    mkdir -p "$jobdir/vault"
+    (
+      cd "$jobdir/vault" || exit 1
+      git init -q
+      git -c user.email=runner@neon.local -c user.name='Neon Root' checkout -q -b main 2>/dev/null || true
+      printf 'KEY=%s\n' "$secret" > vault_key.txt
+      git -c user.email=runner@neon.local -c user.name='Neon Root' add vault_key.txt
+      git -c user.email=runner@neon.local -c user.name='Neon Root' commit -q -m "store vault key"
+      rm -f vault_key.txt
+      git -c user.email=runner@neon.local -c user.name='Neon Root' add -A
+      git -c user.email=runner@neon.local -c user.name='Neon Root' commit -q -m "burn the vault"
+    )
+    rm -f "$jobdir/.git_install_pending"
+  else
+    cat > "$jobdir/vault/README.locked" <<'EOF'
+  Git was not available when this contract was installed.
+  Install git, then re-run ./play.sh (ensure will rebuild the vault) or ./play.sh --new.
+EOF
+    touch "$jobdir/.git_install_pending"
+  fi
 
   cat > "$jobdir/.check_complete" <<EOF
 #!/bin/bash
@@ -66,13 +78,8 @@ if [[ ! -f recovered_key.txt ]]; then
 fi
 got=\$(tr -d ' \\n\\r' < recovered_key.txt)
 if [[ "\$got" == "\$EXPECTED" || "\$got" == "KEY=\$EXPECTED" ]]; then
-  # normalize: accept with or without KEY=
-  if [[ "\$got" == "KEY=\$EXPECTED" ]]; then
-    exit 0
-  fi
   exit 0
 fi
-# also accept KEY= prefix stripped compare
 got2=\${got#KEY=}
 if [[ "\$got2" == "\$EXPECTED" ]]; then
   exit 0

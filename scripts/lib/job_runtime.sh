@@ -388,11 +388,15 @@ ensure_jobs_for_tools() {
             continue
         fi
 
-        # 1) Content
+        # 1) Content (install missing; rebuild git placeholders when git appears)
         if [[ ! -d "$root/jobs/$JOB_ID" ]]; then
             job_install "$root"
             debug "ENSURE_INSTALL $JOB_ID"
             printf 'ENSURE_INSTALL %s\n' "$JOB_ID" >> "$root/.generate.log" 2>/dev/null || true
+        elif [[ -f "$root/jobs/$JOB_ID/.git_install_pending" ]] && command -v git >/dev/null 2>&1; then
+            job_install "$root"
+            debug "ENSURE_REBUILD $JOB_ID"
+            printf 'ENSURE_REBUILD %s\n' "$JOB_ID" >> "$root/.generate.log" 2>/dev/null || true
         fi
 
         # Normalize REQUIRES to space string

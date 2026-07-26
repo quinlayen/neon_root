@@ -21,9 +21,6 @@ fail() { printf '  FAIL: %s\n' "$*"; FAIL=1; }
 echo "Neon Root smoke_test"
 echo "===================="
 
-# Fresh world
-bash "$GEN" --new >/dev/null
-
 # shellcheck disable=SC1091
 source "$REPO/scripts/lib/common.sh"
 # shellcheck disable=SC1091
@@ -32,6 +29,65 @@ source "$REPO/scripts/lib/seed.sh"
 source "$REPO/scripts/lib/job_runtime.sh"
 # shellcheck disable=SC1091
 source "$REPO/scripts/lib/watchers.sh"
+
+# ── Shell-only bar: generate must succeed with git (and optional tools) absent ──
+# Real PATH strip (not just rewriting .tools after a full-tool generate).
+SHELL_ONLY_BIN=$(mktemp -d "${TMPDIR:-/tmp}/neon-smoke-bin.XXXXXX")
+# Minimal PATH: bash, coreutils, and nothing named git/python3/sqlite3
+# Core utils + seed hash tools (required for any generate). Optional skill tools omitted.
+for cmd in bash sh ls cat mkdir rm mv cp chmod ln grep sed awk head tr sort uniq tar od date \
+  mktemp printf true false sleep ps kill pkill basename dirname pwd env touch find \
+  shasum sha256sum; do
+  p=$(command -v "$cmd" 2>/dev/null || true)
+  if [[ -n "$p" && -x "$p" ]]; then
+    ln -sf "$p" "$SHELL_ONLY_BIN/$cmd" 2>/dev/null || true
+  fi
+done
+# Explicitly do NOT link git, python3, sqlite3 (optional skill tools)
+chmod -R u+rwx "$ROOT" 2>/dev/null || true
+rm -rf "$ROOT" 2>/dev/null || true
+set +e
+PATH="$SHELL_ONLY_BIN" bash "$GEN" --new >"$REPO/.smoke_shell_only_gen.log" 2>&1
+gen_rc=$?
+set -e
+if [[ "$gen_rc" -eq 0 && -f "$ROOT/.game_functions.sh" && -d "$ROOT/jobs/tutorial_grid" ]]; then
+  pass "generate --new without git/python3/sqlite3 in PATH"
+else
+  fail "generate --new failed without optional tools (rc=$gen_rc) — see .smoke_shell_only_gen.log"
+fi
+# Board: shell open, git/python/sql locked
+export NEON_ROOT="$ROOT"
+export ROOT
+export REPO
+# shellcheck disable=SC1091
+source "$ROOT/.tools" 2>/dev/null || true
+board_sync_from_ledger "$ROOT"
+b=$(board_bucket "$ROOT" "tutorial_grid")
+[[ "$b" = "open" ]] && pass "shell-only: tutorial open" || fail "shell-only: tutorial bucket=$b"
+b=$(board_bucket "$ROOT" "badge_skim")
+[[ "$b" = "open" ]] && pass "shell-only: badge_skim open" || fail "shell-only: badge_skim=$b"
+b=$(board_bucket "$ROOT" "git_safehouse")
+[[ "$b" = "locked" ]] && pass "shell-only: git_safehouse locked" || fail "shell-only: git_safehouse=$b want locked"
+b=$(board_bucket "$ROOT" "implant_parse")
+[[ "$b" = "locked" ]] && pass "shell-only: implant_parse locked" || fail "shell-only: implant_parse=$b want locked"
+# Complete a shell job under normal PATH (helpers need full environment)
+# shellcheck disable=SC1091
+source "$ROOT/.game_functions.sh"
+cd "$ROOT/safehouse"
+needle=$(grep '^EXPECTED=' "$ROOT/jobs/badge_skim/.check_complete" | head -1 | sed 's/^EXPECTED=//;s/"//g' | tr -d ' \n\r')
+accept badge_skim >/dev/null 2>&1 || true
+printf '%s\n' "$needle" > "$ROOT/jobs/badge_skim/recovered_badge.txt"
+set +e
+complete badge_skim >/dev/null 2>&1
+rc=$?
+set -e
+[[ "$rc" -eq 0 ]] && pass "shell-only world: badge_skim completable" || fail "shell-only world: badge_skim complete failed"
+rm -rf "$SHELL_ONLY_BIN" 2>/dev/null || true
+
+# ── Fresh full-tool world for remaining checks ──
+chmod -R u+rwx "$ROOT" 2>/dev/null || true
+bash "$GEN" --new >/dev/null
+
 # shellcheck disable=SC1091
 source "$ROOT/.tools" 2>/dev/null || true
 export NEON_ROOT="$ROOT"

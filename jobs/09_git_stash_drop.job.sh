@@ -44,16 +44,28 @@ JOB_STRETCH=0
 JOB_HAS_WATCHER=0
 EOF
 
-  (
-    cd "$jobdir/drop" || exit 1
-    git init -q
-    printf 'base\n' > README
-    git -c user.email=runner@neon.local -c user.name='Neon Root' add README
-    git -c user.email=runner@neon.local -c user.name='Neon Root' commit -q -m "base"
-    printf 'STASH=%s\n' "$secret" > stash_note.txt
-    git -c user.email=runner@neon.local -c user.name='Neon Root' stash push -q -u -m "mole drop" -- stash_note.txt
-    rm -f stash_note.txt
-  )
+  # Full stash only when git is available; never abort world gen without git.
+  if command -v git >/dev/null 2>&1; then
+    rm -rf "$jobdir/drop"
+    mkdir -p "$jobdir/drop"
+    (
+      cd "$jobdir/drop" || exit 1
+      git init -q
+      printf 'base\n' > README
+      git -c user.email=runner@neon.local -c user.name='Neon Root' add README
+      git -c user.email=runner@neon.local -c user.name='Neon Root' commit -q -m "base"
+      printf 'STASH=%s\n' "$secret" > stash_note.txt
+      git -c user.email=runner@neon.local -c user.name='Neon Root' stash push -q -u -m "mole drop" -- stash_note.txt
+      rm -f stash_note.txt
+    )
+    rm -f "$jobdir/.git_install_pending"
+  else
+    cat > "$jobdir/drop/README.locked" <<'EOF'
+  Git was not available when this contract was installed.
+  Install git, then re-run ./play.sh (ensure will rebuild the drop) or ./play.sh --new.
+EOF
+    touch "$jobdir/.git_install_pending"
+  fi
 
   cat > "$jobdir/.check_complete" <<EOF
 #!/bin/bash
