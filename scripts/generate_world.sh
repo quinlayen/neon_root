@@ -279,12 +279,12 @@ if [[ "$MODE" == "new" ]]; then
     info "Neon Root — generating new world…"
     # Safe even when metroplex missing or .watchers empty
     kill_all_watchers
-    rm -rf "$ROOT"
+    rm -rf "$ROOT" || die "cannot remove $ROOT (close any shell cd'd into metroplex, then retry --new)"
     mkdir -p "$ROOT"
 
     create_hub_mesh
     seed_write_new "$ROOT" || die "seed_write_new failed"
-    detect_tools "$ROOT" >/dev/null || true
+    detect_tools "$ROOT" >/dev/null || warn "detect_tools failed; .tools may be missing"
     seed_load "$ROOT" || die "seed_load failed"
     write_ledger_stub
     # empty inventory already created
@@ -317,7 +317,7 @@ if [[ ! -f "$ROOT/.seed" ]]; then
 fi
 
 info "Neon Root — continue (refresh helpers / tools)…"
-detect_tools "$ROOT" >/dev/null || true
+detect_tools "$ROOT" >/dev/null || warn "detect_tools failed; .tools may be missing"
 seed_load "$ROOT" || die "seed_load failed"
 write_game_functions
 # ensure_jobs_for_tools not required yet (no jobs)

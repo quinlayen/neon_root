@@ -118,11 +118,21 @@ SAVE_ROOM="$rel"
 SAVE_TIME="$(date '+%Y-%m-%d %H:%M:%S')"
 SAVE_EOF
 
+    # Truncate long paths so fixed-width banner stays aligned (inner width 36)
+    local room_disp="${rel:-.}"
+    local last_disp="$rel"
+    if [[ ${#room_disp} -gt 30 ]]; then
+        room_disp="${room_disp:0:30}..."
+    fi
+    if [[ ${#last_disp} -gt 25 ]]; then
+        last_disp="${last_disp:0:25}..."
+    fi
+
     echo ""
     echo "  ╔══════════════════════════════════════╗"
     echo "  ║              GAME SAVED              ║"
     echo "  ╠══════════════════════════════════════╣"
-    printf "  ║  %-36s║\n" "Room: ${rel:-.}"
+    printf "  ║  %-36s║\n" "Room: ${room_disp}"
     printf "  ║  %-36s║\n" "Time: $(date '+%Y-%m-%d %H:%M:%S')"
     echo "  ╠══════════════════════════════════════╣"
     echo "  ║  World state is already on disk.     ║"
@@ -130,7 +140,7 @@ SAVE_EOF
     echo "  ║                                      ║"
     echo "  ║    ./play.sh                         ║"
     if [[ -n "$rel" ]]; then
-        printf "  ║  %-36s║\n" "Last room: ${rel}"
+        printf "  ║  %-36s║\n" "Last room: ${last_disp}"
     else
         echo "  ║    start room: safehouse             ║"
     fi
