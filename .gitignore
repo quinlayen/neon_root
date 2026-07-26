@@ -7,3 +7,6 @@ __pycache__/
 *.pid
 .save_state
 .play_rc
+
+.smoke_shell_only_gen.log
+.smoke_path_*
