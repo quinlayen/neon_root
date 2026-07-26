@@ -20,13 +20,18 @@ See the design doc for full details. Short versions:
 - **Git** — versioned safehouses, recover deleted intel
 - **SQL** (stretch) — one corp DB heist job
 
-## Requirements (target)
+## Requirements
+
+**Required**
 
 - macOS or Linux
-- bash
-- `python3`
-- `git`
-- optional: `sqlite3` for SQL jobs
+- bash (including macOS system bash 3.2)
+
+**Optional** (for optional skill jobs; the shell-only path is completable without them)
+
+- `python3` — Python jobs
+- `git` — Git jobs
+- `sqlite3` — SQL stretch jobs
 
 ## Play (not implemented yet)
 
