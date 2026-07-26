@@ -38,6 +38,7 @@ seed_write_new() {
 }
 
 # seed_load ROOT — load NEON_SEED/SEED from ROOT/.seed (whitespace stripped)
+# Seed is opaque; non-32/non-hex still accepted with a warn (hand-edited .seed).
 seed_load() {
     local root="$1"
     local seed_file raw
@@ -55,6 +56,14 @@ seed_load() {
         printf 'seed_load: empty seed in %s\n' "$seed_file" >&2
         return 1
     fi
+    if [[ ${#raw} -ne 32 ]]; then
+        printf 'seed_load: warn: expected 32 hex chars, got %d\n' "${#raw}" >&2
+    fi
+    case "$raw" in
+        *[!0-9a-fA-F]*)
+            printf 'seed_load: warn: seed is not pure hex\n' >&2
+            ;;
+    esac
     NEON_SEED="$raw"
     SEED="$raw"
     return 0
@@ -62,7 +71,7 @@ seed_load() {
 
 # seed_token JOB_ID NAME [LEN]
 # Portable SHA-256 hex of "seed:job_id:name"; first LEN chars (default 8).
-# Uses shasum -a 256 with sha256sum fallback.
+# Uses shasum -a 256 with sha256sum fallback. LEN must be 1..64.
 seed_token() {
     local job_id="$1"
     local name="$2"
@@ -74,14 +83,28 @@ seed_token() {
         return 1
     fi
 
+    # Positive integer 1..64 (sha256 hex is 64 chars). bash 3.2-safe (no =~).
+    case "$len" in
+        ''|*[!0-9]*)
+            printf 'seed_token: len must be a positive integer (got %s)\n' "$len" >&2
+            return 1
+            ;;
+    esac
+    if [[ "$len" -lt 1 || "$len" -gt 64 ]]; then
+        printf 'seed_token: len must be 1..64 (got %s)\n' "$len" >&2
+        return 1
+    fi
+
     seed="${NEON_SEED:-${SEED:-}}"
     if [[ -z "$seed" ]]; then
         printf 'seed_token: seed not loaded (call seed_load or seed_write_new first)\n' >&2
         return 1
     fi
 
-    # Portable hash: shasum (macOS) or sha256sum (Linux)
-    hash=$(printf '%s' "${seed}:${job_id}:${name}" | (shasum -a 256 2>/dev/null || sha256sum) | awk '{print $1}')
+    # Portable hash: shasum (macOS) or sha256sum (Linux); first field only
+    hash=$(printf '%s' "${seed}:${job_id}:${name}" | (shasum -a 256 2>/dev/null || sha256sum))
+    hash=${hash%% *}
+    hash=${hash%%$'\t'*}
     if [[ -z "$hash" ]]; then
         printf 'seed_token: hash failed (need shasum or sha256sum)\n' >&2
         return 1

@@ -2,7 +2,14 @@
 # ============================================================
 #  Neon Root — shared helpers (generator and scripts)
 #  Sourceable. bash 3.2 safe (no associative arrays).
+#
+#  Prefer sourcing via an absolute path. repo_root_from defaults
+#  use the absolute directory of this file captured at source time
+#  so later cd does not break resolution.
 # ============================================================
+
+# Absolute dir of this file at source time (survives later cd)
+_NEON_COMMON_DIR=$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || _NEON_COMMON_DIR=""
 
 # die MSG... — print error to stderr and exit 1
 die() {
@@ -69,14 +76,19 @@ abs_dir() {
 }
 
 # repo_root_from [SCRIPT_PATH] — absolute repo root given a script under scripts/
-# Default: caller BASH_SOURCE[1] or this file's location.
+# Default: absolute dir of common.sh captured at source (_NEON_COMMON_DIR).
+# Callers may pass an absolute SCRIPT_PATH; relative paths need cwd still valid.
 repo_root_from() {
     local script="${1:-}"
     local dir
-    if [[ -z "$script" ]]; then
+    if [[ -n "$script" ]]; then
+        dir=$(cd "$(dirname -- "$script")" && pwd) || die "cannot resolve script dir: $script"
+    elif [[ -n "${_NEON_COMMON_DIR:-}" ]]; then
+        dir="$_NEON_COMMON_DIR"
+    else
         script="${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}"
+        dir=$(cd "$(dirname -- "$script")" && pwd) || die "cannot resolve script dir"
     fi
-    dir=$(cd "$(dirname -- "$script")" && pwd) || die "cannot resolve script dir"
     # scripts/ or scripts/lib/ → go up to repo root
     case "$dir" in
         */scripts/lib) printf '%s\n' "$(cd "$dir/../.." && pwd)" ;;
